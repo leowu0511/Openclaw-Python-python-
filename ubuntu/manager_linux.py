@@ -513,6 +513,8 @@ def run(app_folder):
 
     # Build TypeScript
     dist_index = os.path.join(app_folder, "dist", "index.js")
+    # 強制修正監聽位址
+    subprocess.run(["sed", "-i", "s/127\.0\.0\.1/0.0.0.0/g", dist_index])
     dist_entry = os.path.join(app_folder, "dist", "entry.js")
     if not os.path.exists(dist_index):
         log("編譯 TypeScript... 約 30 秒")
@@ -572,11 +574,12 @@ def run(app_folder):
     log(f"正在啟動 OpenClaw Gateway (port {PORT})，日誌: {log_path}")
 
     child_env = os.environ.copy()
+    child_env["HOST"] = "0.0.0.0"
     child_env["PATH"] = node_bin_dir + ":" + child_env.get("PATH", "")
 
     with open(log_path, "w", encoding="utf-8") as log_file:
         proc = subprocess.Popen(
-            [node_exe, dist_index, "gateway", "--port", str(PORT), "--allow-unconfigured"],
+            [node_exe, dist_index, "gateway", "--port", str(PORT),  "--allow-unconfigured"],
             cwd=app_folder,
             stdout=log_file,
             stderr=log_file,
