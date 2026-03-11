@@ -8,6 +8,9 @@ import urllib.error
 import json
 import getpass
 
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
+
 # --- 產品配置 ---
 APP_NAME = "OpenClaw 懶人盒 Pro (v22 引擎升級版)"
 NODE_URL = "https://nodejs.org/dist/v22.13.1/node-v22.13.1-win-x64.zip"
