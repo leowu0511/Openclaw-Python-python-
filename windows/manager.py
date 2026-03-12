@@ -17,34 +17,16 @@ NODE_URL = "https://nodejs.org/dist/v22.13.1/node-v22.13.1-win-x64.zip"
 OPENCLAW_MAIN_URL = "https://github.com/openclaw/openclaw/archive/refs/heads/main.zip"
 OPENCLAW_RELEASE_API = "https://api.github.com/repos/openclaw/openclaw/releases/latest"
 MINGIT_URL = "https://github.com/git-for-windows/git/releases/download/v2.44.0.windows.1/MinGit-2.44.0-64-bit.zip"
-NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
-NVIDIA_DEFAULT_MODEL_ID = "meta/llama-3.3-70b-instruct"
-NVIDIA_DEFAULT_MODEL = f"nvidia/{NVIDIA_DEFAULT_MODEL_ID}"
-NVIDIA_PREFERRED_MODELS = [
-    {
-        "id": "meta/llama-3.3-70b-instruct",
-        "name": "Meta Llama 3.3 70B Instruct"
-    },
-    {
-        "id": "meta/llama-3.1-8b-instruct",
-        "name": "Meta Llama 3.1 8B Instruct"
-    },
-    {
-        "id": "mistralai/mistral-small-3.1-24b-instruct-2503",
-        "name": "Mistral Small 3.1 24B Instruct"
-    },
-    {
-        "id": "nvidia/llama-3.1-nemotron-70b-instruct",
-        "name": "NVIDIA Llama 3.1 Nemotron 70B Instruct"
-    },
-    {
-        "id": "meta/llama-3.3-70b-instruct",
-        "name": "Meta Llama 3.3 70B Instruct"
-    },
-    {
-        "id": "nvidia/mistral-nemo-minitron-8b-8k-instruct",
-        "name": "NVIDIA Mistral NeMo Minitron 8B"
-    }
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+OPENROUTER_DEFAULT_MODEL_ID = "openrouter/hunter-alpha"
+OPENROUTER_DEFAULT_MODEL = f"openrouter/{OPENROUTER_DEFAULT_MODEL_ID}"
+OPENROUTER_PREFERRED_MODELS = [
+    {"id": "openrouter/hunter-alpha",             "name": "1. Hunter Alpha               [預設] 1T參數 1M context Agentic"},
+    {"id": "arcee-ai/trinity-large-preview:free", "name": "2. Arcee Trinity Large Preview       400B Agent框架最佳化"},
+    {"id": "stepfun/step-3.5-flash:free",         "name": "3. StepFun Step 3.5 Flash            196B 速度快 256K 匯報整理"},
+    {"id": "arcee-ai/trinity-mini:free",          "name": "4. Arcee Trinity Mini                26B 輕量備用"},
+    {"id": "nvidia/nemotron-3-nano-30b-a3b:free", "name": "5. NVIDIA Nemotron 3 Nano 30B        Agentic 系統指令穩定"},
+    {"id": "openrouter/free",                     "name": "6. OpenRouter Auto Free              自動挑最適合免費模型"},
 ]
 WORKDIR = os.getcwd()
 
@@ -62,7 +44,6 @@ def download_and_extract(url, target_dir):
 
     extracted_roots = []
     with zipfile.ZipFile(zip_tmp, 'r') as zip_ref:
-        # 記錄 zip 內第一層目錄，供後續自動整理資料夾名稱
         members = [name for name in zip_ref.namelist() if name and not name.startswith("__MACOSX/")]
         extracted_roots = sorted({name.split("/", 1)[0] for name in members if "/" in name})
         zip_ref.extractall(target_dir)
@@ -133,7 +114,6 @@ def install_openclaw_source(app_folder):
     if not normalize_openclaw_folder(extracted_roots, app_folder):
         raise RuntimeError("OpenClaw 解壓縮後找不到可用資料夾")
 
-    # 記錄來源，方便後續除錯
     source_meta = os.path.join(app_folder, ".launcher-source")
     with open(source_meta, "w", encoding="ascii", newline="\n") as f:
         f.write(f"tag={tag}\n")
@@ -157,7 +137,7 @@ def ask_yes_no(prompt, default=False):
         return default
     return answer in ("y", "yes", "1", "true")
 
-def extract_provider_model_id(primary_model, provider="nvidia"):
+def extract_provider_model_id(primary_model, provider="openrouter"):
     if not isinstance(primary_model, str):
         return None
     prefix = f"{provider}/"
@@ -165,7 +145,7 @@ def extract_provider_model_id(primary_model, provider="nvidia"):
         return primary_model[len(prefix):]
     return None
 
-def build_nvidia_provider_models(selected_model_id=None):
+def build_openrouter_provider_models(selected_model_id=None):
     models = []
     seen = set()
 
@@ -175,7 +155,7 @@ def build_nvidia_provider_models(selected_model_id=None):
             models.append({"id": model_id, "name": model_id})
             seen.add(model_id)
 
-    for item in NVIDIA_PREFERRED_MODELS:
+    for item in OPENROUTER_PREFERRED_MODELS:
         model_id = item.get("id")
         if model_id and model_id not in seen:
             models.append(item)
@@ -183,14 +163,14 @@ def build_nvidia_provider_models(selected_model_id=None):
 
     return models
 
-def probe_nvidia_model(api_key, model_id):
+def probe_openrouter_model(api_key, model_id):
     payload = {
         "model": model_id,
         "messages": [{"role": "user", "content": "ping"}],
         "max_tokens": 8
     }
     req = urllib.request.Request(
-        f"{NVIDIA_BASE_URL}/chat/completions",
+        f"{OPENROUTER_BASE_URL}/chat/completions",
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {api_key}",
@@ -207,7 +187,7 @@ def probe_nvidia_model(api_key, model_id):
     except Exception as e:
         return False, str(e)
 
-def read_current_nvidia_model_id(config_file):
+def read_current_openrouter_model_id(config_file):
     if not os.path.exists(config_file):
         return None
     try:
@@ -219,29 +199,29 @@ def read_current_nvidia_model_id(config_file):
             .get("model", {})
             .get("primary")
         )
-        return extract_provider_model_id(primary, "nvidia")
+        return extract_provider_model_id(primary, "openrouter")
     except Exception:
         return None
 
-def choose_nvidia_model(api_key, current_model_id=None):
+def choose_openrouter_model(api_key, current_model_id=None):
     candidates = []
     if current_model_id:
         candidates.append(current_model_id)
-    for item in NVIDIA_PREFERRED_MODELS:
+    for item in OPENROUTER_PREFERRED_MODELS:
         model_id = item.get("id")
         if model_id and model_id not in candidates:
             candidates.append(model_id)
 
-    log("正在測試 NVIDIA 模型可用性... 約 5-20 秒")
+    log("正在測試 OpenRouter 模型可用性... 約 5-20 秒")
     results = []
     for idx, model_id in enumerate(candidates, start=1):
-        ok, detail = probe_nvidia_model(api_key, model_id)
+        ok, detail = probe_openrouter_model(api_key, model_id)
         status = "OK" if ok else f"HTTP {detail}" if isinstance(detail, int) else str(detail)
         print(f"  {idx}. {model_id} ({status})")
         results.append((model_id, ok))
 
     working = [model_id for model_id, ok in results if ok]
-    default_model_id = working[0] if working else (current_model_id or NVIDIA_DEFAULT_MODEL_ID)
+    default_model_id = working[0] if working else (current_model_id or OPENROUTER_DEFAULT_MODEL_ID)
 
     choice = input(
         f"請輸入模型編號或直接輸入模型ID (Enter 使用 {default_model_id}): "
@@ -268,36 +248,36 @@ def choose_nvidia_model(api_key, current_model_id=None):
 
     return selected_model_id
 
-def maybe_bootstrap_nvidia_config(config_file):
-    """每次啟動都可選擇是否重設 NVIDIA NIM 設定。"""
+def maybe_bootstrap_openrouter_config(config_file):
+    """每次啟動都可選擇是否重設 OpenRouter 設定。"""
     has_config = os.path.exists(config_file)
 
     if has_config:
-        prompt = "是否要重新設定 NVIDIA NIM API 金鑰？輸入 yes 重新設定，輸入 n 跳過"
+        prompt = "是否要重新設定 OpenRouter API 金鑰？輸入 yes 重新設定，輸入 n 跳過"
     else:
-        prompt = "未偵測到 OpenClaw 設定檔，是否改用 NVIDIA NIM API 自動建立設定"
+        prompt = "未偵測到 OpenClaw 設定檔，是否改用 OpenRouter API 自動建立設定"
 
     if not ask_yes_no(prompt, default=False):
         return False
 
     try:
-        api_key = getpass.getpass("請輸入 NVIDIA_API_KEY (nvapi-...): ").strip()
+        api_key = getpass.getpass("請輸入 OPENROUTER_API_KEY (sk-or-...): ").strip()
     except Exception:
-        api_key = input("請輸入 NVIDIA_API_KEY (nvapi-...): ").strip()
+        api_key = input("請輸入 OPENROUTER_API_KEY (sk-or-...): ").strip()
 
     if not api_key:
         if has_config:
-            log("未輸入 NVIDIA_API_KEY，保留現有設定")
+            log("未輸入 OPENROUTER_API_KEY，保留現有設定")
         else:
-            err("NVIDIA_API_KEY 為空，將改走 setup 精靈")
+            err("OPENROUTER_API_KEY 為空，將改走 setup 精靈")
         return False
 
-    if not api_key.startswith("nvapi-"):
-        log("警告: Key 看起來不是 nvapi- 開頭，請確認是否正確")
+    if not api_key.startswith("sk-or-"):
+        log("警告: Key 看起來不是 sk-or- 開頭，請確認是否正確")
 
-    current_model_id = read_current_nvidia_model_id(config_file)
-    selected_model_id = choose_nvidia_model(api_key, current_model_id)
-    selected_primary_model = f"nvidia/{selected_model_id}"
+    current_model_id = read_current_openrouter_model_id(config_file)
+    selected_model_id = choose_openrouter_model(api_key, current_model_id)
+    selected_primary_model = selected_model_id if selected_model_id.startswith("openrouter/") else f"openrouter/{selected_model_id}"
 
     config_dir = os.path.dirname(config_file)
     os.makedirs(config_dir, exist_ok=True)
@@ -315,14 +295,14 @@ def maybe_bootstrap_nvidia_config(config_file):
 
     config = {
         "env": {
-            "NVIDIA_API_KEY": api_key
+            "OPENROUTER_API_KEY": api_key
         },
         "models": {
             "providers": {
-                "nvidia": {
-                    "baseUrl": NVIDIA_BASE_URL,
+                "openrouter": {
+                    "baseUrl": OPENROUTER_BASE_URL,
                     "api": "openai-completions",
-                    "models": build_nvidia_provider_models(selected_model_id)
+                    "models": build_openrouter_provider_models(selected_model_id)
                 }
             }
         },
@@ -340,14 +320,14 @@ def maybe_bootstrap_nvidia_config(config_file):
         f.write("\n")
 
     if has_config:
-        log(f"已更新 NVIDIA NIM 設定: {config_file}")
+        log(f"已更新 OpenRouter 設定: {config_file}")
     else:
-        log(f"已建立 NVIDIA NIM 設定: {config_file}")
+        log(f"已建立 OpenRouter 設定: {config_file}")
     log(f"已選模型: {selected_primary_model}")
     return True
 
-def ensure_nvidia_models_schema(config_file):
-    """修復既有設定：若 nvidia provider 缺 models 陣列，補上預設值。"""
+def ensure_openrouter_models_schema(config_file):
+    """修復既有設定：若 openrouter provider 缺 models 陣列，補上預設值。"""
     if not os.path.exists(config_file):
         return False
 
@@ -359,9 +339,9 @@ def ensure_nvidia_models_schema(config_file):
 
     models = cfg.get("models") if isinstance(cfg, dict) else None
     providers = models.get("providers") if isinstance(models, dict) else None
-    nvidia = providers.get("nvidia") if isinstance(providers, dict) else None
+    openrouter = providers.get("openrouter") if isinstance(providers, dict) else None
 
-    if not isinstance(nvidia, dict):
+    if not isinstance(openrouter, dict):
         return False
 
     primary = (
@@ -370,9 +350,9 @@ def ensure_nvidia_models_schema(config_file):
         .get("model", {})
         .get("primary")
     )
-    current_model_id = extract_provider_model_id(primary, "nvidia")
+    current_model_id = extract_provider_model_id(primary, "openrouter")
 
-    current_models = nvidia.get("models")
+    current_models = openrouter.get("models")
     if isinstance(current_models, list) and len(current_models) > 0:
         return False
 
@@ -383,16 +363,15 @@ def ensure_nvidia_models_schema(config_file):
         with open(backup_file, "w", encoding="utf-8", newline="\n") as dst:
             dst.write(old_data)
     except OSError:
-        # 備份失敗不阻擋修復，至少先讓設定可用
         pass
 
-    nvidia["models"] = build_nvidia_provider_models(current_model_id)
+    openrouter["models"] = build_openrouter_provider_models(current_model_id)
 
     with open(config_file, "w", encoding="utf-8", newline="\n") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
         f.write("\n")
 
-    log("已自動修復 NVIDIA 設定: 補上 models.providers.nvidia.models")
+    log("已自動修復 OpenRouter 設定: 補上 models.providers.openrouter.models")
     return True
 
 def find_git_bin(git_dir):
@@ -409,14 +388,12 @@ def find_git_bin(git_dir):
             log(f"找到 bash.exe 於: {root}")
             bash_dir = root
 
-        # MinGit 常見只有 sh.exe，沒有 bash.exe
         if "sh.exe" in files and sh_dir is None:
             sh_dir = root
 
     if not bash_dir and sh_dir:
         log(f"未找到 bash.exe，改用 sh.exe 於: {sh_dir}")
 
-        # 提供 bash.cmd，讓 `bash xxx.sh` 在 Windows + MinGit 仍可執行
         if cmd_dir:
             bash_cmd = os.path.join(cmd_dir, "bash.cmd")
             if not os.path.exists(bash_cmd):
@@ -441,7 +418,6 @@ def find_node(node_dir):
         if "node.exe" in files:
             return root
     return None
-
 
 
 def init_env():
@@ -491,21 +467,6 @@ def init_env():
     stable_folder = os.path.join(WORKDIR, "openclaw-stable")
     app_folder = main_folder
 
-    # 已知 main 分支有機會先引用尚未發佈的 npm API，這裡自動偵測並切換到 stable
-    if os.path.exists(main_folder) and is_incompatible_openclaw_snapshot(main_folder):
-        log("偵測到 OpenClaw 版本與已發佈套件不相容，將改抓 stable release")
-        if not try_backup_folder(main_folder):
-            # Windows 上若資料夾被 node/gateway 佔用，改用新路徑避免 WinError 5
-            app_folder = stable_folder
-            log(f"將改用替代資料夾: {app_folder}")
-
-    # 若目標資料夾本身也是不相容版本，先嘗試備份再重抓
-    if os.path.exists(app_folder) and is_incompatible_openclaw_snapshot(app_folder):
-        log(f"目標資料夾 {app_folder} 仍是舊版不相容快照，嘗試重抓 stable")
-        if not try_backup_folder(app_folder, "不相容版本"):
-            err("OpenClaw 資料夾正被其他程式佔用，請先關閉相關 Node/Gateway 程序後重試")
-            input("按 Enter 結束...")
-            exit(1)
 
     if not os.path.exists(app_folder):
         try:
@@ -531,11 +492,8 @@ def run(app_folder):
     pnpm_path = os.path.join(node_bin_dir, "pnpm.cmd")
     node_exe = os.path.join(node_bin_dir, "node.exe")
 
-    # pnpm 的全局 bin（npm install -g 會裝到這裡）
-    # 用 node_env 資料夾本身（已在 PATH）
     pnpm_global_bin = node_bin_dir
 
-    # 安裝 pnpm
     npm_path_clean = os.path.join(node_bin_dir, "npm.cmd")
     if not os.path.exists(pnpm_path):
         log("安裝 pnpm...")
@@ -547,14 +505,13 @@ def run(app_folder):
         log("首次安裝依賴 (pnpm install)... 約 2-3 分鐘")
         subprocess.run([pnpm_path, "install", "--ignore-scripts"], cwd=app_folder_clean)
 
-    # Build TypeScript（如果 dist/index.js 不存在）
+    # Build TypeScript
     dist_index = os.path.join(app_folder_clean, "dist", "index.js")
     dist_entry = os.path.join(app_folder_clean, "dist", "entry.js")
     if not os.path.exists(dist_index):
         log("編譯 TypeScript... 約 30 秒")
         build_result = subprocess.run([pnpm_path, "run", "build"], cwd=app_folder_clean)
         if build_result.returncode != 0:
-            # 上游 main 偶爾會出現型別檢查不一致；若 runtime dist 已產生則先繼續啟動。
             if os.path.exists(dist_index) and os.path.exists(dist_entry):
                 log("警告: build 型別檢查失敗，但 runtime dist 已產生，先繼續啟動")
             else:
@@ -567,23 +524,18 @@ def run(app_folder):
     ui_build_flag = os.path.join(app_folder_clean, ".ui_built")
     ui_dir = os.path.join(app_folder_clean, "ui")
     if not os.path.exists(ui_build_flag) and os.path.exists(ui_dir):
-        # Patch vite.config.ts：加入 root 設定為相對路徑，解決空格問題
         vite_config = os.path.join(ui_dir, "vite.config.ts")
         vite_config_bak = vite_config + ".bak"
-        patched = False
         if os.path.exists(vite_config) and not os.path.exists(vite_config_bak):
             with open(vite_config, "r", encoding="utf-8") as f:
                 cfg = f.read()
-            # 備份原始檔
             with open(vite_config_bak, "w", encoding="utf-8") as f:
                 f.write(cfg)
-            # 在 defineConfig({ 後插入 root: './',
             if "defineConfig({" in cfg and "root:" not in cfg:
                 cfg = cfg.replace("defineConfig({", "defineConfig({\n  root: './',")
                 with open(vite_config, "w", encoding="utf-8") as f:
                     f.write(cfg)
                 log("已 patch vite.config.ts (加入 root: './')")
-                patched = True
 
         log("安裝 UI 依賴...")
         subprocess.run([pnpm_path, "install"], cwd=ui_dir)
@@ -600,22 +552,21 @@ def run(app_folder):
 
     # 首次執行時，先執行 setup
     config_file = os.path.join(os.path.expanduser("~"), ".openclaw", "openclaw.json")
-    nvidia_bootstrapped = maybe_bootstrap_nvidia_config(config_file)
-    ensure_nvidia_models_schema(config_file)
+    openrouter_bootstrapped = maybe_bootstrap_openrouter_config(config_file)
+    ensure_openrouter_models_schema(config_file)
 
     if not os.path.exists(config_file):
         log("首次設定 OpenClaw，正在執行 setup 精靈...")
         subprocess.run([node_exe, dist_index, "setup"], cwd=app_folder_clean)
         log("setup 完成")
-    elif nvidia_bootstrapped:
-        log("已套用 NVIDIA NIM 設定，略過 setup 精靈")
+    elif openrouter_bootstrapped:
+        log("已套用 OpenRouter 設定，略過 setup 精靈")
 
     # 啟動 Gateway
     PORT = 8080
     log_path = os.path.join(WORKDIR, "server.log")
     log(f"正在啟動 OpenClaw Gateway (port {PORT})，日誌: {log_path}")
 
-    # 把 pnpm 目錄加進子 process 的 PATH，讓 Gateway 自己也找得到 pnpm
     child_env = os.environ.copy()
     child_env["PATH"] = pnpm_global_bin + ";" + child_env.get("PATH", "")
 
@@ -645,7 +596,7 @@ def run(app_folder):
         input("\n請截圖錯誤訊息後按 Enter 結束...")
         exit(1)
 
-    # 讀取 token 並直接帶入 URL，避免需要手動貼上
+    # 讀取 token 並直接帶入 URL
     token = ""
     config_path = os.path.join(os.path.expanduser("~"), ".openclaw", "openclaw.json")
     try:
@@ -656,7 +607,6 @@ def run(app_folder):
         pass
 
     if token:
-        # openclaw dashboard URL 格式：帶 token 參數讓瀏覽器自動認證
         webbrowser.open(f"http://127.0.0.1:{PORT}/?token={token}")
         log(f"Token: {token}")
         log("如果畫面仍顯示未授權，請手動將上方 Token 貼入網頁的「網關令牌」欄位")
